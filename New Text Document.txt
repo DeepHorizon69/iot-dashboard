@@ -1,0 +1,285 @@
+You are now the Lead Firmware Engineer for this project.
+
+The dashboard architecture is already finished.
+
+Your job is NOT to redesign the dashboard.
+
+Your job is to analyze the existing dashboard code and generate a fully compatible ESP32 firmware architecture.
+
+==================================================
+PROJECT
+==================================================
+
+Project Name:
+IoT Early Hazardous Gas Detection System
+
+Hardware:
+
+- ESP32-D0WD-V3
+- MQ2
+- MQ4
+- MQ135
+- DHT22
+- SSD1306 OLED (I2C)
+- Active Buzzer
+
+Pin Mapping:
+
+MQ2    GPIO34
+MQ4    GPIO35
+MQ135  GPIO32
+
+DHT22  GPIO4
+
+OLED SDA GPIO21
+OLED SCL GPIO22
+
+BUZZER GPIO26
+
+==================================================
+MQTT
+==================================================
+
+Broker:
+
+broker.emqx.io
+
+Existing Topics:
+
+Subscribe:
+- alsa/gas/config
+
+Publish:
+- alsa/gas/data
+- alsa/gas/state
+- alsa/gas/config/ack
+
+DO NOT change topic names.
+
+==================================================
+SYSTEM STATES
+==================================================
+
+HEATING
+NORMAL
+WARNING
+DANGER
+
+==================================================
+HEATING
+==================================================
+
+Heating duration:
+
+300 seconds
+
+Behavior:
+
+- No alarms during heating
+- No danger detection during heating
+- OLED displays countdown
+- Dashboard displays HEATING state
+
+==================================================
+STATE LOGIC
+==================================================
+
+NORMAL
+
+- MQ2 < OFF Threshold
+- MQ4 < OFF Threshold
+- MQ135 < OFF Threshold
+- Temperature < 40°C
+
+WARNING
+
+- Any gas sensor > OFF Threshold
+OR
+- Temperature > 40°C
+
+DANGER
+
+- Any gas sensor > ON Threshold
+OR
+- Temperature > 50°C
+
+Humidity is DISPLAY ONLY.
+
+Humidity must NEVER affect alarms.
+
+==================================================
+CONFIGURATION
+==================================================
+
+Configuration comes from MQTT.
+
+ESP32 must support:
+
+MQ2:
+- enabled
+- on threshold
+- off threshold
+
+MQ4:
+- enabled
+- on threshold
+- off threshold
+
+MQ135:
+- enabled
+- on threshold
+- off threshold
+
+DHT22:
+- enabled
+- tempWarn
+
+Buzzer:
+- enabled
+
+All settings must be stored using Preferences (NVS).
+
+Settings must persist after reboot.
+
+==================================================
+OLED REQUIREMENTS
+==================================================
+
+OLED screens:
+
+1. Boot Screen
+2. Heating Screen
+3. Monitoring Screen
+4. Fault Screen
+
+Monitoring Screen example:
+
+MQ2 : xxxx
+MQ4 : xxxx
+MQ135: xxxx
+
+T:30.5 H:72
+
+STATE
+
+==================================================
+FAULT DETECTION
+==================================================
+
+Display faults ONLY on OLED.
+
+Detect:
+
+- MQ2 disconnected
+- MQ4 disconnected
+- MQ135 disconnected
+- DHT22 read failure
+
+Fault detection must not stop MQTT operation.
+
+==================================================
+BUZZER LOGIC
+==================================================
+
+NORMAL
+
+- OFF
+
+WARNING
+
+- 200ms beep every 1 second
+
+DANGER
+
+- Continuous ON
+
+==================================================
+MQTT TELEMETRY
+==================================================
+
+Telemetry must match dashboard expectations exactly.
+
+Expected payload:
+
+{
+  "mq2": 1200,
+  "mq4": 800,
+  "mq135": 1500,
+  "temp": 30.5,
+  "hum": 70.2,
+  "state": "NORMAL",
+  "mq2Enabled": true,
+  "mq4Enabled": true,
+  "mq135Enabled": true,
+  "dhtEnabled": true
+}
+
+Do not change field names.
+
+==================================================
+MQTT CONFIG ACK
+==================================================
+
+ESP32 must publish configuration acknowledgement after:
+
+- boot
+- configuration change
+- reconnect
+
+==================================================
+SENSOR PROCESSING
+==================================================
+
+Implement:
+
+- Moving Average (10 samples)
+- Non-blocking code
+- millis() based timing
+- Auto WiFi reconnect
+- Auto MQTT reconnect
+- Safe JSON parsing
+- Safe defaults
+
+==================================================
+ARCHITECTURE
+==================================================
+
+Design firmware as:
+
+main.ino
+
+wifi_manager
+mqtt_manager
+config_manager
+sensor_manager
+oled_manager
+alarm_manager
+state_manager
+
+If Arduino IDE compatibility is required, keep it as one file but logically separated into sections.
+
+==================================================
+TASK
+==================================================
+
+Analyze the dashboard source code.
+
+Identify:
+
+1. Required telemetry fields
+2. Required config fields
+3. Required MQTT behavior
+4. Missing firmware requirements
+
+Then generate:
+
+- Complete firmware architecture
+- MQTT payload specification
+- State machine
+- OLED flow
+- Preferences structure
+- Sensor processing flow
+
+Do NOT modify dashboard compatibility.
+
+The firmware must adapt to the dashboard, not the other way around.

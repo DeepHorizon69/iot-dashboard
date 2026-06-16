@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="ESP32 Gas Monitoring Dashboard — MQ2, MQ4, MQ135, DHT22 realtime safety telemetry">
+  <title>ESP32 Gas Monitoring Dashboard</title>
+  <script>
+    (() => {
+      let savedTheme = "";
+      try {
+        savedTheme = localStorage.getItem("iot-dashboard-theme") || "";
+      } catch {
+        savedTheme = "";
+      }
+      const prefersLight = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches;
+      document.documentElement.dataset.theme = savedTheme || (prefersLight ? "light" : "dark");
+    })();
+  </script>
+  <link rel="stylesheet" href="css/styles.css">
+  <script src="https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js"></script>
+  <script>
+    if (!window.mqtt) {
+      document.write('<script src="https://cdn.jsdelivr.net/npm/mqtt@4.3.7/dist/mqtt.min.js"><\/script>');
+    }
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div class="brand">
+        <h1>ESP32 Gas Monitoring</h1>
+        <p>MQ2, MQ4, MQ135, DHT22 realtime safety telemetry</p>
+      </div>
+      <div class="connection">
+        <div class="status-pill" id="mqttStatus" data-state="DISCONNECTED" aria-live="polite">
+          <span class="status-dot" aria-hidden="true"></span>
+          <strong id="mqttStatusText">DISCONNECTED</strong>
+        </div>
+        <div class="status-pill" id="espStatus" data-state="DISCONNECTED" aria-live="polite">
+          <span class="status-dot" aria-hidden="true"></span>
+          <strong id="espStatusText">ESP32 OFFLINE</strong>
+        </div>
+        <div class="last-update">Last Update: <strong id="lastUpdate">-</strong></div>
+        <button class="theme-toggle" id="themeToggle" type="button" aria-label="Switch theme">
+          <span class="theme-icon" aria-hidden="true"></span>
+          <span id="themeText">Dark</span>
+        </button>
+      </div>
+    </header>
+
+    <section class="grid sensor-grid" aria-label="Realtime sensors">
+      <article class="card sensor-card" data-sensor="mq2">
+        <div class="sensor-label">MQ2 <span class="sensor-state active" id="mq2State">ACTIVE</span></div>
+        <div class="sensor-value" id="mq2Value">-</div>
+        <div class="sensor-unit">ADC</div>
+        <div class="sensor-stats" aria-label="MQ2 statistics">
+          <span>Current: <strong id="mq2Current">-</strong></span>
+          <span>Min: <strong id="mq2Min">-</strong></span>
+          <span>Max: <strong id="mq2Max">-</strong></span>
+          <span>Avg: <strong id="mq2Avg">-</strong></span>
+        </div>
+      </article>
+      <article class="card sensor-card" data-sensor="mq4">
+        <div class="sensor-label">MQ4 <span class="sensor-state active" id="mq4State">ACTIVE</span></div>
+        <div class="sensor-value" id="mq4Value">-</div>
+        <div class="sensor-unit">ADC</div>
+        <div class="sensor-stats" aria-label="MQ4 statistics">
+          <span>Current: <strong id="mq4Current">-</strong></span>
+          <span>Min: <strong id="mq4Min">-</strong></span>
+          <span>Max: <strong id="mq4Max">-</strong></span>
+          <span>Avg: <strong id="mq4Avg">-</strong></span>
+        </div>
+      </article>
+      <article class="card sensor-card" data-sensor="mq135">
+        <div class="sensor-label">MQ135 <span class="sensor-state active" id="mq135State">ACTIVE</span></div>
+        <div class="sensor-value" id="mq135Value">-</div>
+        <div class="sensor-unit">ADC</div>
+        <div class="sensor-stats" aria-label="MQ135 statistics">
+          <span>Current: <strong id="mq135Current">-</strong></span>
+          <span>Min: <strong id="mq135Min">-</strong></span>
+          <span>Max: <strong id="mq135Max">-</strong></span>
+          <span>Avg: <strong id="mq135Avg">-</strong></span>
+        </div>
+      </article>
+      <article class="card sensor-card" data-sensor="temp">
+        <div class="sensor-label">Temperature <span class="sensor-state active" id="tempState">ACTIVE</span></div>
+        <div class="sensor-value" id="tempValue">-</div>
+        <div class="sensor-unit">Celsius</div>
+        <div class="sensor-stats" aria-label="Temperature statistics">
+          <span>Current: <strong id="tempCurrent">-</strong></span>
+          <span>Min: <strong id="tempMin">-</strong></span>
+          <span>Max: <strong id="tempMax">-</strong></span>
+          <span>Avg: <strong id="tempAvg">-</strong></span>
+        </div>
+      </article>
+      <article class="card sensor-card" data-sensor="hum">
+        <div class="sensor-label">Humidity <span class="sensor-state active" id="humState">ACTIVE</span></div>
+        <div class="sensor-value" id="humValue">-</div>
+        <div class="sensor-unit">Percent (display only)</div>
+        <div class="sensor-stats" aria-label="Humidity statistics">
+          <span>Current: <strong id="humCurrent">-</strong></span>
+          <span>Min: <strong id="humMin">-</strong></span>
+          <span>Max: <strong id="humMax">-</strong></span>
+          <span>Avg: <strong id="humAvg">-</strong></span>
+        </div>
+      </article>
+    </section>
+
+    <section class="grid ops-grid" aria-label="Operations overview">
+      <article class="card health-card" id="healthCard" data-score="good">
+        <div class="section-title">
+          <h2>System Health</h2>
+        </div>
+        <div class="health-grid">
+          <div class="health-item"><span>MQTT Status</span><strong id="healthMqtt">DISCONNECTED</strong></div>
+          <div class="health-item"><span>ESP32 Status</span><strong id="healthEsp">OFFLINE</strong></div>
+          <div class="health-item"><span>Last Packet</span><strong id="healthLastPacket">-</strong></div>
+          <div class="health-item"><span>Packet Count</span><strong id="healthPacketCount">0</strong></div>
+          <div class="health-item"><span>Uptime</span><strong id="healthUptime">00:00:00</strong></div>
+          <div class="health-item"><span>Health Score</span><strong id="healthScore">0%</strong></div>
+          <div class="health-score-wrap">
+            <span>Health Index</span>
+            <div class="health-score-bar-track" aria-hidden="true">
+              <div class="health-score-bar" id="healthScoreBar"></div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="card event-log-card">
+        <div class="section-title">
+          <h2>Event Log</h2>
+        </div>
+        <div class="event-log" id="eventLog" aria-live="polite" aria-relevant="additions" aria-label="Recent system events"></div>
+      </article>
+    </section>
+
+    <section class="grid settings-grid" aria-label="MQTT project settings">
+      <article class="card mqtt-settings-card">
+        <div class="section-title">
+          <h2>MQTT Project Settings</h2>
+        </div>
+        <div class="namespace-layout">
+          <div class="field namespace-field">
+            <label for="projectNamespace">Project Namespace</label>
+            <input id="projectNamespace" type="text" autocomplete="off" spellcheck="false" inputmode="text" aria-describedby="namespaceError">
+            <div class="namespace-error" id="namespaceError" aria-live="polite"></div>
+          </div>
+          <div class="namespace-actions">
+            <button class="secondary-button" id="saveNamespace" type="button">Save Namespace</button>
+            <button class="secondary-button" id="generateNamespace" type="button">Generate Random Namespace</button>
+            <button class="secondary-button" id="copyTopics" type="button">Copy Topics</button>
+          </div>
+        </div>
+        <div class="topic-panel" aria-label="Current MQTT topics">
+          <div class="topic-row"><span>Namespace</span><code id="currentNamespace">alsa</code></div>
+          <div class="topic-row"><span>Data</span><code id="topicData">alsa/gas/data</code></div>
+          <div class="topic-row"><span>State</span><code id="topicState">alsa/gas/state</code></div>
+          <div class="topic-row"><span>Config</span><code id="topicConfig">alsa/gas/config</code></div>
+          <div class="topic-row"><span>Config Ack</span><code id="topicConfigAck">alsa/gas/config/ack</code></div>
+        </div>
+      </article>
+    </section>
+
+    <section class="grid main-grid">
+      <article class="card state-panel" id="statePanel" data-state="NORMAL" aria-live="polite">
+        <div class="state-kicker">System Status</div>
+        <div class="state-value" id="systemState">NORMAL</div>
+        <div class="state-caption">Safety state received from ESP32 telemetry stream. Humidity is display-only and does not affect alarms.</div>
+        <div class="heating-panel" id="heatingPanel" hidden>
+          <div class="heating-label">Heating Mode</div>
+          <div class="heating-status" id="heatingStatus">Sensor warm-up in progress</div>
+          <div class="heating-meta">
+            <span>Countdown</span>
+            <strong class="heating-countdown" id="heatingCountdown">--:--</strong>
+          </div>
+          <div class="heating-progress" aria-hidden="true">
+            <div class="heating-progress-fill" id="heatingProgressFill"></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="card config-card">
+        <div class="section-title">
+          <h2>Configuration</h2>
+        </div>
+        <form id="configForm" novalidate>
+          <div class="form-grid">
+            <label class="switch-row">MQ2 Enabled <input id="cfgMq2Enabled" type="checkbox" checked><span class="switch"></span></label>
+            <label class="switch-row">MQ4 Enabled <input id="cfgMq4Enabled" type="checkbox" checked><span class="switch"></span></label>
+            <label class="switch-row">MQ135 Enabled <input id="cfgMq135Enabled" type="checkbox" checked><span class="switch"></span></label>
+            <label class="switch-row">DHT22 Enabled <input id="cfgDhtEnabled" type="checkbox" checked><span class="switch"></span></label>
+            <label class="switch-row">Buzzer Enabled <input id="cfgBuzzerEnabled" type="checkbox" checked><span class="switch"></span></label>
+
+            <div class="field" id="fieldMq2On"><label for="cfgMq2On">MQ2 Threshold ON</label><input id="cfgMq2On" type="number" min="0" step="1" inputmode="numeric" value="2500"></div>
+            <div class="field" id="fieldMq2Off"><label for="cfgMq2Off">MQ2 Threshold OFF</label><input id="cfgMq2Off" type="number" min="0" step="1" inputmode="numeric" value="1800"></div>
+            <div class="field" id="fieldMq4On"><label for="cfgMq4On">MQ4 Threshold ON</label><input id="cfgMq4On" type="number" min="0" step="1" inputmode="numeric" value="2500"></div>
+            <div class="field" id="fieldMq4Off"><label for="cfgMq4Off">MQ4 Threshold OFF</label><input id="cfgMq4Off" type="number" min="0" step="1" inputmode="numeric" value="1800"></div>
+            <div class="field" id="fieldMq135On"><label for="cfgMq135On">MQ135 Threshold ON</label><input id="cfgMq135On" type="number" min="0" step="1" inputmode="numeric" value="2500"></div>
+            <div class="field" id="fieldMq135Off"><label for="cfgMq135Off">MQ135 Threshold OFF</label><input id="cfgMq135Off" type="number" min="0" step="1" inputmode="numeric" value="1800"></div>
+            <div class="field" id="fieldTempWarn"><label for="cfgTempWarn">Temperature Warning Threshold</label><input id="cfgTempWarn" type="number" min="0.1" step="0.1" inputmode="decimal" value="40"></div>
+          </div>
+          <div class="form-actions">
+            <div class="errors" id="validationErrors" aria-live="polite"></div>
+            <button class="save-button" type="submit">SAVE CONFIGURATION</button>
+          </div>
+        </form>
+      </article>
+    </section>
+
+    <section class="grid chart-grid" aria-label="Sensor charts">
+      <article class="card chart-card"><h3>MQ2</h3><div class="chart-wrap"><canvas id="mq2Chart"></canvas></div></article>
+      <article class="card chart-card"><h3>MQ4</h3><div class="chart-wrap"><canvas id="mq4Chart"></canvas></div></article>
+      <article class="card chart-card"><h3>MQ135</h3><div class="chart-wrap"><canvas id="mq135Chart"></canvas></div></article>
+      <article class="card chart-card"><h3>Temperature</h3><div class="chart-wrap"><canvas id="tempChart"></canvas></div></article>
+      <article class="card chart-card"><h3>Humidity</h3><div class="chart-wrap"><canvas id="humChart"></canvas></div></article>
+    </section>
+  </main>
+
+  <div class="toast-stack" id="toastStack" aria-live="polite"></div>
+</body>
+</html>
